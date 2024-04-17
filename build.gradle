@@ -1,0 +1,87 @@
+buildscript {
+    ext.kafka_version = '3.7.0'
+    ext.scala_version = '2.13'
+    ext.slf4j_version = '2.0.12'
+}
+
+plugins {
+    // Apply the java-library plugin for API and implementation separation.
+    id 'java-library'
+    id 'jacoco'
+}
+
+group 'com.sas.kafka.auth'
+version '0.0.1'
+
+repositories {
+    // Use Maven Central for resolving dependencies.
+    mavenCentral()
+}
+
+dependencies {
+    // Use JUnit test framework.
+    testImplementation libs.junit
+
+    // This dependency is exported to consumers, that is to say found on their compile classpath.
+    api libs.commons.math3
+
+    // This dependency is used internally, and not exposed to consumers on their own compile classpath.
+    implementation libs.guava
+
+    implementation "org.apache.kafka:kafka_$scala_version:$kafka_version"
+    implementation "org.slf4j:slf4j-api:$slf4j_version"
+}
+
+// Apply a specific Java toolchain to ease working on different environments.
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(15)
+    }
+}
+
+jar {
+    archiveBaseName.set(rootProject.name)
+}
+
+allprojects {
+    gradle.projectsEvaluated {
+        tasks.withType(JavaCompile) {
+            options.compilerArgs << "-Xlint:unchecked" << "-Xlint:deprecation"
+        }
+    }
+}
+
+test {
+    // Enable display of stdout messages during unit tests (to allow debugging)
+    testLogging {
+        showStandardStreams = true
+    }
+
+    finalizedBy jacocoTestReport // report is always generated after tests run
+}
+
+jacocoTestReport {
+    dependsOn test // tests are required to run before generating the report
+}
+            
+jacocoTestCoverageVerification {
+    violationRules {
+        // Ensure that each class has a minimum of 40% coverage
+        rule {  
+            element = 'CLASS'
+            limit {
+                counter = 'LINE'
+                value = 'COVEREDRATIO'
+                minimum = 0.2
+            }
+            // includes = ['com.sas.kafka.auth.*', 'com.sas.kafka.auth.*']
+            excludes = [
+                'com.sas.kafka.auth.KafkaAuthorizer',
+                'com.sas.kafka.auth.KafkaAuthenticationHandler',
+                'com.sas.kafka.auth.LDAPServer'
+            ]
+        }
+    }
+}
+// Run coverage verification during the build (and fail when appropriate)
+check.dependsOn jacocoTestCoverageVerification
