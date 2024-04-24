@@ -85,6 +85,8 @@ public class LDAPServer {
         LDAPUser user = new LDAPUser();
         setObjectValuesFromString(user, dn);
 
+        logger.info("SSDEBUG: Parsed bind DN for LDAP connection: " + dn + " -> " + getAuthenticationDn(user));
+
         // Authenticate with the LDAP server
         bindContext = getLdapContext(user, pass);
     }
@@ -181,39 +183,13 @@ public class LDAPServer {
      */
     private DirContext getLdapContext(LDAPUser user, String pass) throws LDAPException {
         // Construct a fully qualified LDAP distinquished name that can be used to authenticate the user
-        // The LDAPUser.toString() method might have other junk in the result that causes authentication to fail
-        String delimiter = ",";
-        StringBuffer userDn = new StringBuffer();
-        if (user.hasCommonName()) {
-            if (userDn.length() > 0) {
-                userDn.append(delimiter);
-            }
-            userDn.append(commonNameField + "=" + user.getCommonName());
-        }
+        String userDn = getAuthenticationDn(user);
+        logger.info("SSDEBUG: Attempting to authenticate user: " + userDn);
 
-        if (user.hasOrganizationalUnits()) {
-            for (String org : user.getOrganizationalUnits()) {
-                if (userDn.length() > 0) {
-                    userDn.append(delimiter);
-                }
-                userDn.append(organizationalUnitField + "=" + org);
-            }
-        }
-
-        if (user.hasDomainComponents()) {
-            for (String component : user.getDomainComponents()) {
-                if (userDn.length() > 0) {
-                    userDn.append(delimiter);
-                }
-                userDn.append(domainComponentField + "=" + component);
-            }
-        }
-
-        logger.info("SSDEBUG: Attempting to authenticate user: " + userDn.toString());
         Hashtable<String,String> env = new Hashtable <String,String>();
         env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
         env.put(Context.SECURITY_AUTHENTICATION, "simple");
-        env.put(Context.SECURITY_PRINCIPAL, userDn.toString());
+        env.put(Context.SECURITY_PRINCIPAL, userDn);
         env.put(Context.SECURITY_CREDENTIALS, pass);
         env.put(Context.PROVIDER_URL, uri);
 
@@ -345,25 +321,26 @@ public class LDAPServer {
     }
 
     /**
-     * Return the LDAP User as an string.
+     * Return the LDAP User as a DN string that can be used during LDAP authentication.
      *
      * @return String representation of the LDAP User
      */
-    public String toString(LDAPUser user) {
+    public String getAuthenticationDn(LDAPUser user) {
         StringBuffer sb = new StringBuffer();
 
-        if (user.hasAccountName()) {
-            if (sb.length() > 0) {
-                sb.append(FIELD_DELIMITER);
-            }
-            sb.append(accountNameField + "=" + user.getAccountName());
-        }
-
+        // Use either the common name or the account name when constructing
+        // the DN, but not both.  Prefer the common name if available.
+        // Using both will cause an authentication failure.
         if (user.hasCommonName()) {
             if (sb.length() > 0) {
                 sb.append(FIELD_DELIMITER);
             }
             sb.append(commonNameField + "=" + user.getCommonName());
+        } else if (user.hasAccountName()) {
+            if (sb.length() > 0) {
+                sb.append(FIELD_DELIMITER);
+            }
+            sb.append(accountNameField + "=" + user.getAccountName());
         }
 
         if (user.hasOrganizationalUnits()) {
@@ -410,6 +387,7 @@ public class LDAPServer {
                 String name = fieldMatcher.group(1);
                 String value = fieldMatcher.group(2).replaceAll("\\\\,",",");
 
+                // Parse the common fields
                 if (name.equalsIgnoreCase(commonNameField)) {
                     obj.setCommonName(value);
                 } else if (name.equalsIgnoreCase(organizationalUnitField)) {
@@ -417,6 +395,16 @@ public class LDAPServer {
                 } else if (name.equalsIgnoreCase(domainComponentField)) {
                     obj.addDomainComponent(value);
                 }
+
+                // Parse the user specific fields
+                if (obj instanceof LDAPUser) {
+                    if (name.equalsIgnoreCase(accountNameField)) {
+                        ((LDAPUser)obj).setAccountName(value);
+                    } else if (name.equalsIgnoreCase(emailField)) {
+                        ((LDAPUser)obj).setEmail(value);
+                    }
+                }
+
             }
         }
     }
