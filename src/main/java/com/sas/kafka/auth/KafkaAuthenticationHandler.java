@@ -42,6 +42,9 @@ public class KafkaAuthenticationHandler implements AuthenticateCallbackHandler {
     /** Kafka property specifying the LDAP bind password for the account used to query LDAP */
     public static final String AUTH_LDAP_BIND_PASSWORD = "auth.ldap.bind.password";
 
+    /** Kafka property specifying the LDAP field used to identify a username */
+    public static final String AUTH_LDAP_ACCOUNTNAME_FIELD = "auth.ldap.user.id";
+
     /** Kafka property specifying whether to enable an authentication cache */
     public static final String AUTH_CACHE_ENABLED = "auth.cache.enabled";
 
@@ -65,7 +68,7 @@ public class KafkaAuthenticationHandler implements AuthenticateCallbackHandler {
     /**
      * Boolean indicating whether the authentication cache is enabled or disabled.
      */
-    private static boolean cacheEnabled = true;
+    private static boolean cacheEnabled = false;
 
     /**
      * Random salt used to hash passwords.  Since password hashing only matters
@@ -147,6 +150,20 @@ public class KafkaAuthenticationHandler implements AuthenticateCallbackHandler {
             logger.info("LDAP Authentication handler property is set: " + AUTH_LDAP_SERVER_URL + " = " + url);
         }
 
+        // Construct the LDAP server as soon as the URL is available
+        // so that the server can be updated by later properties
+        server = new LDAPServer(url);
+
+        // Override any LDAP server fields
+        String accountNameField = (String) configs.get(AUTH_LDAP_ACCOUNTNAME_FIELD);
+        if (accountNameField == null) {
+            logger.info("LDAP Authentication handler property is null: " + AUTH_LDAP_ACCOUNTNAME_FIELD + " (Default: " + server.getAccountNameField() + ")");
+        } else {
+            logger.info("LDAP Authentication handler property is set: " + AUTH_LDAP_ACCOUNTNAME_FIELD + " = " + accountNameField);
+            server.setAccountNameField(accountNameField);
+        }
+
+        // Configure the bind credentials used to connect to the server and run queries
         String bindDn = (String) configs.get(AUTH_LDAP_BIND_DN);
         if (bindDn == null) {
             logger.error("LDAP Authentication handler property must not be null: " + AUTH_LDAP_BIND_DN);
@@ -190,10 +207,9 @@ public class KafkaAuthenticationHandler implements AuthenticateCallbackHandler {
             cacheAgeLimit = Integer.parseInt(cacheAge);
         }
 
-        // Construct the LDAP server from the property values
+        // Connect to the LDAP server using the bind credentials
         try {
-            LDAPUser bindUser = new LDAPUser(bindDn);
-            server = new LDAPServer(url, bindUser, bindPass);
+            server.connect(bindDn, bindPass);
             logger.info("Established connection to LDAP server: " + url);
         } catch (LDAPException ex) {
             logger.error("Failed to connect to LDAP server using bind credentials: " + ex.getMessage());

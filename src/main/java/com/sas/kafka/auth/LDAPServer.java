@@ -9,6 +9,8 @@ import java.util.Hashtable;
 import javax.naming.Context;
 import javax.naming.NamingEnumeration;
 import javax.naming.NamingException;
+import javax.naming.directory.Attribute;
+import javax.naming.directory.Attributes;
 import javax.naming.directory.DirContext;
 import javax.naming.directory.InitialDirContext;
 import javax.naming.directory.SearchControls;
@@ -30,14 +32,27 @@ import org.slf4j.LoggerFactory;
 public class LDAPServer {
     private static final Logger logger = LoggerFactory.getLogger(LDAPServer.class);
 
-    /** List of LDAP fields to return from a user query */
-    // See https://docs.microsoft.com/en-us/windows/win32/ad/address-book-properties
-    private static String[] userAttributes = {
-        LDAPObject.ACCOUNTNAME_FIELD,
-        LDAPObject.COMMONNAME_FIELD,
-        LDAPObject.EMAIL_FIELD,
-        LDAPUser.MEMBEROF_FIELD
-    };
+    /** Delimiter used in the LDAP query string produced by the toString method */
+    public static final String FIELD_DELIMITER = ",";
+
+    /** LDAP field used for the organizational unit */
+    public String organizationalUnitField = "ou";
+
+    /** LDAP field used for the domain component */
+    public String domainComponentField = "dc";
+
+    /** LDAP field used for the common name */
+    public String commonNameField = "cn";
+
+    /** LDAP field used for the email address */
+    public String emailField = "mail";
+
+    /** LDAP field used for the username */
+    public String accountNameField = "sAMAccountName";
+
+    /** LDAP field used to indicate a group relationship */
+    public String memberOfField = "memberOf";
+
 
     /** Server protocol, host, and port information for connecting to the LDAP server */
     private String uri = null;
@@ -51,14 +66,26 @@ public class LDAPServer {
      * that can be used to access the server and query for user or group information.
      *
      * @param uri   LDAP connection information
-     * @param user  LDAP user information required for connecting to the LDAP server
+     */
+    public LDAPServer(String uri) {
+        this.uri = uri;
+    }
+
+    /**
+     * Establish a connection to the LDAP server using the LDAP user credentials.
+     * Any overrides to the LDAP field names need to be performed before this
+     * method is called in order for the DN string to be parsed correctly.
+     *
+     * @param dn    LDAP user DN information required for connecting to the LDAP server
      * @param pass  LDAP password required for connecting to the LDAP server
      * @throws LDAPException if the LDAP connection fails
      */
-    public LDAPServer(String uri, LDAPUser user, String pass) throws LDAPException {
-        this.uri = uri;
+    public void connect(String dn, String pass) throws LDAPException {
+        // Construct a user object from the DN string
+        LDAPUser user = new LDAPUser();
+        setObjectValuesFromString(user, dn);
 
-        // Establish a connection to the LDAP server using the bind credentials
+        // Authenticate with the LDAP server
         bindContext = getLdapContext(user, pass);
     }
 
@@ -70,6 +97,79 @@ public class LDAPServer {
     public String getURI() {
         return uri;
     }
+
+    /**
+     * Set the LDAP field used to store the domain component (DC).
+     *
+     * @param  field  Domain component field
+     */
+    public void setDomainComponentField(String field) {
+        this.domainComponentField = field;
+    }
+
+    /**
+     * Return the LDAP field used to store the domain component (DC).
+     *
+     * @return  Domain component field
+     */
+    public String getDomainComponentField() {
+        return domainComponentField;
+    }
+
+    /**
+     * Set the LDAP field used to store the organizational unit (OU).
+     *
+     * @param  field  Organizational unit field
+     */
+    public void setOrganizationalUnitField(String field) {
+        this.organizationalUnitField = field;
+    }
+
+    /**
+     * Return the LDAP field used to store the organizational unit (OU).
+     *
+     * @return  Organizatinal unit field
+     */
+    public String getOrganizationalUnitField() {
+        return organizationalUnitField;
+    }
+
+    /**
+     * Set the LDAP field used to store the common name (CN).
+     *
+     * @param  field  Common name field
+     */
+    public void setCommonNameField(String field) {
+        this.commonNameField = field;
+    }
+
+    /**
+     * Return the LDAP field used to store the common name (CN).
+     *
+     * @return  Account name field
+     */
+    public String getCommonNameField() {
+        return commonNameField;
+    }
+
+    /**
+     * Set the LDAP field used to store the account name (username).
+     *
+     * @param  field  Account name field
+     */
+    public void setAccountNameField(String field) {
+        this.accountNameField = field;
+    }
+
+    /**
+     * Return the LDAP field used to store the account name (username).
+     *
+     * @return  Account name field
+     */
+    public String getAccountNameField() {
+        return accountNameField;
+    }
+
 
     /**
      * Return an LDAP context that can be used to establish a connection to the LDAP server.
@@ -88,7 +188,7 @@ public class LDAPServer {
             if (userDn.length() > 0) {
                 userDn.append(delimiter);
             }
-            userDn.append("CN=" + user.getCommonName());
+            userDn.append(commonNameField + "=" + user.getCommonName());
         }
 
         if (user.hasOrganizationalUnits()) {
@@ -96,7 +196,7 @@ public class LDAPServer {
                 if (userDn.length() > 0) {
                     userDn.append(delimiter);
                 }
-                userDn.append("OU=" + org);
+                userDn.append(organizationalUnitField + "=" + org);
             }
         }
 
@@ -105,7 +205,7 @@ public class LDAPServer {
                 if (userDn.length() > 0) {
                     userDn.append(delimiter);
                 }
-                userDn.append("DC=" + component);
+                userDn.append(domainComponentField + "=" + component);
             }
         }
 
@@ -142,6 +242,15 @@ public class LDAPServer {
         //   2. http://www.javaxt.com/wiki/Tutorials/Windows/How_to_Authenticate_Users_with_Active_Directory
         //   3. http://roufid.com/java-ldap-ssl-authentication/
 
+        /** List of LDAP fields to return from a user query */
+        // See https://docs.microsoft.com/en-us/windows/win32/ad/address-book-properties
+        String[] userAttributes = {
+            accountNameField,
+            commonNameField,
+            emailField,
+            memberOfField
+        };
+
         // Query for the user DN so that it can be used to validate the password
         LDAPUser targetUser = null;
         String filter = "(" + field + "=" + value + ")";
@@ -149,15 +258,49 @@ public class LDAPServer {
         search.setSearchScope(SearchControls.SUBTREE_SCOPE);
         search.setReturningAttributes(userAttributes);
         try {
+            logger.info("SSDEBUG: Attempting to query LDAP for user: " + filter);
             NamingEnumeration<SearchResult> answer = bindContext.search("", filter, search);
             if (answer.hasMore()) {
                 // Pick the first result in the search results (hopefully there is only one)
                 SearchResult result = (SearchResult) answer.next();
+                Attributes attrs = result.getAttributes();
 
                 // Construct the user object by parsing the full LDAP string
                 String userDN = result.getNameInNamespace();
-                targetUser = new LDAPUser(userDN);
-                targetUser.setValues(result.getAttributes());
+                logger.info("SSDEBUG: Found user result: " + userDN);
+                targetUser = new LDAPUser();
+                if ((userDN != null) && (userDN.length() > 0)) {
+                    setObjectValuesFromString(targetUser, userDN);
+                }
+
+                // Populate the remaining user attributes
+                Attribute attrAccountName = attrs.get(accountNameField);
+                if ((attrAccountName != null) && (attrAccountName.get() != null)) {
+                    targetUser.setAccountName(attrAccountName.get().toString());
+                }
+        
+                Attribute attrCommonName = attrs.get(commonNameField);
+                if ((attrCommonName != null) && (attrCommonName.get() != null)) {
+                    targetUser.setCommonName(attrCommonName.get().toString());
+                }
+        
+                Attribute attrEmail = attrs.get(emailField);
+                if ((attrEmail != null) && (attrEmail.get() != null)) {
+                    targetUser.setEmail(attrEmail.get().toString());
+                }
+
+                Attribute memberOf = attrs.get(memberOfField);
+                if ((memberOf != null) && (memberOf.getAll() != null)) {
+                    // Iterate over each group and create an LDAP object from the DN string
+                    NamingEnumeration groupList = memberOf.getAll();
+                    while (groupList.hasMore()) {
+                        LDAPGroup group = new LDAPGroup();
+                        setObjectValuesFromString(group, groupList.next().toString());
+                        targetUser.addGroup(group);
+                    }
+                }
+        
+        
             }
             answer.close();
         } catch (NamingException nex) {
@@ -181,7 +324,7 @@ public class LDAPServer {
         boolean validCredentials = false;
 
         // Query LDAP to get the user information
-        LDAPUser user = getUser(LDAPObject.ACCOUNTNAME_FIELD, username);
+        LDAPUser user = getUser(accountNameField, username);
 
         // Validate the user password
         DirContext userContext = null;
@@ -191,12 +334,91 @@ public class LDAPServer {
                 validCredentials = true;
             } catch (LDAPException ex) {
                 // Authentication will throw an exception if the password is not valid
-                logger.debug("Failed to authenticate user: " + user.toString() + " (" + ex.toString() + ")");
+                logger.debug("Failed to authenticate user: " + username + " (" + ex.toString() + ")");
                 validCredentials = false;
             }
+        } else {
+            logger.warn("Failed to locate LDAP user: " + username);
         }
 
         return validCredentials;
+    }
+
+    /**
+     * Return the LDAP User as an string.
+     *
+     * @return String representation of the LDAP User
+     */
+    public String toString(LDAPUser user) {
+        StringBuffer sb = new StringBuffer();
+
+        if (user.hasAccountName()) {
+            if (sb.length() > 0) {
+                sb.append(FIELD_DELIMITER);
+            }
+            sb.append(accountNameField + "=" + user.getAccountName());
+        }
+
+        if (user.hasCommonName()) {
+            if (sb.length() > 0) {
+                sb.append(FIELD_DELIMITER);
+            }
+            sb.append(commonNameField + "=" + user.getCommonName());
+        }
+
+        if (user.hasOrganizationalUnits()) {
+            for (String org : user.getOrganizationalUnits()) {
+                if (sb.length() > 0) {
+                    sb.append(FIELD_DELIMITER);
+                }
+                sb.append(organizationalUnitField + "=" + org);
+            }
+        }
+
+        if (user.hasDomainComponents()) {
+            for (String component : user.getDomainComponents()) {
+                if (sb.length() > 0) {
+                    sb.append(FIELD_DELIMITER);
+                }
+                sb.append(domainComponentField + "=" + component);
+            }
+        }
+
+        return sb.toString();
+    }
+
+    /**
+     * Populate a object by parsing the LDAP query string.  This is the reverse
+     * of the toString() operation.
+     *
+     * @param  obj     LDAP Object to populate from the query string
+     * @param  query   LDAP query string
+     * @throws LDAPException if the query string is null or empty
+     */
+    public void setObjectValuesFromString(LDAPObject obj, String query) throws LDAPException {
+        if ((query == null) || (query.length() == 0)) {
+            throw new LDAPException("The LDAP object query parameter must not be a null or empty string.");
+        }
+
+        Pattern pattern = Pattern.compile("(.*?(?<!\\\\)),|.+$");
+        Pattern fieldPattern = Pattern.compile("(.*?)=(.*)$");
+        Matcher matcher = pattern.matcher(query);
+        while (matcher.find()) {
+            String field = (matcher.group(1)!=null)?matcher.group(1):matcher.group(0);
+            Matcher fieldMatcher = fieldPattern.matcher(field);
+            if (fieldMatcher.find()) {
+                String name = fieldMatcher.group(1);
+                String value = fieldMatcher.group(2).replaceAll("\\\\,",",");
+
+                if (name.equalsIgnoreCase(commonNameField)) {
+                    obj.setCommonName(value);
+                } else if (name.equalsIgnoreCase(organizationalUnitField)) {
+                    obj.addOrganizationalUnit(value);
+                } else if (name.equalsIgnoreCase(domainComponentField)) {
+                    obj.addDomainComponent(value);
+                }
+            }
+        }
     }
 
 }

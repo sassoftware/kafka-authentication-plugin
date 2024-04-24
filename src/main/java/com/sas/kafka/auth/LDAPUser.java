@@ -4,23 +4,21 @@
  */
 package com.sas.kafka.auth;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-
-import javax.naming.NamingEnumeration;
-import javax.naming.NamingException;
-import javax.naming.directory.Attribute;
-import javax.naming.directory.Attributes;
 
 /**
  * Information about an LDAP user.
  */
 public class LDAPUser extends LDAPObject {
 
-    /** LDAP field containing the groups that the user belongs to */
-    public static final String MEMBEROF_FIELD = "memberOf";
+    /** The LDAP account name */
+    private String accountName = null;
+
+    /** The user email address */
+    private String email = null;
+
 
     /** List of groups that the user belongs to */
     private List<LDAPGroup> groups = new ArrayList<LDAPGroup>();
@@ -32,18 +30,57 @@ public class LDAPUser extends LDAPObject {
     }
 
     /**
-     * Construct a object by parsing the LDAP query string.  This is the reverse
-     * of the toString() operation.
+     * Set the LDAP account name (username).
      *
-     * @param  query   LDAP query string
-     * @throws LDAPException if the query string is null or empty
+     * @param  name  Account name
      */
-    public LDAPUser(String query) throws LDAPException {
-        if ((query != null) && (query.length() > 0)) {
-            fromString(this, query);
-        } else {
-            throw new LDAPException("The LDAP user query parameter must not be a null or empty string.");
-        }
+    public void setAccountName(String name) {
+        this.accountName = name;
+    }
+
+    /**
+     * Return the LDAP account name (username).
+     *
+     * @return  Account name
+     */
+    public String getAccountName() {
+        return accountName;
+    }
+
+    /**
+     * Return true if the account name is set.
+     *
+     * @return TRUE if the account name is set
+     */
+    public boolean hasAccountName() {
+        return ((accountName != null) && (accountName.trim().length() > 0));
+    }
+
+    /**
+     * Set the email address.
+     *
+     * @param  address    Email address
+     */
+    public void setEmail(String address) {
+        this.email = address;
+    }
+
+    /**
+     * Return the email address.
+     *
+     * @return  Email address
+     */
+    public String getEmail() {
+        return email;
+    }
+
+    /**
+     * Return true if an email address is set.
+     *
+     * @return  TRUE if an email address is set.
+     */
+    public boolean hasEmail() {
+        return ((email != null) && (email.trim().length() > 0));
     }
 
     /**
@@ -87,27 +124,6 @@ public class LDAPUser extends LDAPObject {
         // Add the group to the list if it does not already exist
         if (!groups.contains(group)) {
             groups.add(group);
-        }
-    }
-
-    /**
-     * Populate the LDAP object with data from the query results.
-     *
-     * @param attrs   LDAP query result attributes
-     * @throws NamingException if the attributes contain invalid data
-     * @throws LDAPException if an error occurs setting the LDAP values from the attribute data
-     */
-    protected void setValues(Attributes attrs) throws LDAPException, NamingException {
-        super.setValues(attrs);
-
-        Attribute memberOf = attrs.get(MEMBEROF_FIELD);
-        if ((memberOf != null) && (memberOf.getAll() != null)) {
-            // Iterate over each group and create an LDAP object from the DN string
-            NamingEnumeration groupList = memberOf.getAll();
-            while (groupList.hasMore()) {
-                LDAPGroup group = new LDAPGroup(groupList.next().toString());
-                addGroup(group);
-            }
         }
     }
 

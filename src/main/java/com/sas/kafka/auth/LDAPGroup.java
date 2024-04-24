@@ -4,24 +4,15 @@
  */
 package com.sas.kafka.auth;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-
-import javax.naming.NamingEnumeration;
-import javax.naming.NamingException;
-import javax.naming.directory.Attribute;
-import javax.naming.directory.Attributes;
 
 
 /**
  * Information about an LDAP group.
  */
 public class LDAPGroup extends LDAPObject {
-
-    /** LDAP field containing the users that belong to a group */
-    public static final String MEMBER_FIELD = "member";
 
     /** List of users that belong to the group */
     private List<LDAPUser> users = new ArrayList<LDAPUser>();
@@ -30,17 +21,6 @@ public class LDAPGroup extends LDAPObject {
      * Construct an empty object.
      */
     public LDAPGroup() {
-    }
-
-    /**
-     * Construct a object by parsing the LDAP query string.  This is the reverse
-     * of the toString() operation.
-     *
-     * @param  query   LDAP query string
-     * @throws LDAPException if the query string is null or empty
-     */
-    public LDAPGroup(String query) throws LDAPException {
-        fromString(this, query);
     }
 
     /**
@@ -87,29 +67,4 @@ public class LDAPGroup extends LDAPObject {
         }
     }
 
-    /**
-     * Populate the LDAP object with data from the query results.
-     *
-     * @param attrs   LDAP query result attributes
-     * @throws NamingException if the attributes contain invalid data
-     * @throws LDAPException if an error occurs setting the LDAP values from the attribute data
-     */
-    protected void setValues(Attributes attrs) throws LDAPException, NamingException {
-        super.setValues(attrs);
-
-        // Find the member field
-        // can't use get since it may have other information
-        // in the id (ie member;range=1-1499)
-        for (NamingEnumeration ae = attrs.getAll(); ae.hasMore();) {
-            Attribute attr = (Attribute)ae.next();
-            if (attr.getID().startsWith(MEMBER_FIELD) && attr.getAll() != null) {
-                // Iterate over each user and create an LDAP object from the DN string
-                NamingEnumeration userList = attr.getAll();
-                while (userList.hasMore()) {
-                    LDAPUser usr = new LDAPUser(userList.next().toString());
-                    addUser(usr);
-                }
-            }
-        }
-    }
 }
