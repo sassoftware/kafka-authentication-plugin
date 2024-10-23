@@ -14,7 +14,7 @@ import java.util.Date;
 public class AuthenticationAttempt {
 
     /** Authentication credentials used in the attempt */
-    private AuthenticationCredentials credentials = null;
+    private AuthenticationCredential credentials = null;
 
     /** Result of the authentication attempt */
     private AuthenticationStatus status = AuthenticationStatus.FAILURE;
@@ -35,7 +35,7 @@ public class AuthenticationAttempt {
      *
      * @param credentials   Username provided by the client
      */
-    public AuthenticationAttempt(AuthenticationCredentials credentials) {
+    public AuthenticationAttempt(AuthenticationCredential credentials) {
         this.credentials = credentials;
     }
 
@@ -53,7 +53,7 @@ public class AuthenticationAttempt {
      *
      * @return Authentication credentials
      */
-    public AuthenticationCredentials getCredentials() {
+    public AuthenticationCredential getCredentials() {
         return credentials;
     }
 

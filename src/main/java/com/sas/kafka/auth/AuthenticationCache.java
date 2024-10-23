@@ -63,7 +63,7 @@ public class AuthenticationCache {
      * @return String representing the username and password combination
      * @throws AuthenticationCredentialsException if the username or password digest are null
      */
-    private String getCacheKey(AuthenticationCredentials credentials) throws AuthenticationCredentialsException {
+    private String getCacheKey(AuthenticationCredential credentials) throws AuthenticationCredentialsException {
         String username = credentials.getUsername();
         if ((username == null) || (username.length() == 0)) {
             throw new AuthenticationCredentialsException("Authentication attempt contains credentials with a null or empty username.");
@@ -95,7 +95,7 @@ public class AuthenticationCache {
      * 
      * @param credentials  User credential to target when pruning
      */
-    public void prune(AuthenticationCredentials credentials) {
+    public void prune(AuthenticationCredential credentials) {
         if (attempts != null) {
             try {
                 String key = getCacheKey(credentials);
@@ -143,7 +143,7 @@ public class AuthenticationCache {
      * @param credentials User authentication credentials
      * @return Most recent authentication attempt
      */
-    public AuthenticationAttempt getMostRecentAttempt(AuthenticationCredentials credentials) {
+    public AuthenticationAttempt getMostRecentAttempt(AuthenticationCredential credentials) {
         AuthenticationAttempt attempt = null;
 
         AuthenticationHistory history = getAttemptHistory(credentials);
@@ -160,7 +160,7 @@ public class AuthenticationCache {
      * @param credentials User authentication credentials
      * @return List of authentication attempts
      */
-    public AuthenticationHistory getAttemptHistory(AuthenticationCredentials credentials) {
+    public AuthenticationHistory getAttemptHistory(AuthenticationCredential credentials) {
         // Call prune first to ensure this method returns accurate results
         prune(credentials);
 
@@ -181,7 +181,7 @@ public class AuthenticationCache {
      * @param credentials User authentication credentials
      * @return Number of authentication attempts in the cache
      */
-    public int getAttemptHistoryCount(AuthenticationCredentials credentials) {
+    public int getAttemptHistoryCount(AuthenticationCredential credentials) {
         AuthenticationHistory history = getAttemptHistory(credentials);
         if (history != null) {
             return history.getAttemptCount();

@@ -85,7 +85,7 @@ public class LDAPServer {
         LDAPUser user = new LDAPUser();
         setObjectValuesFromString(user, dn);
 
-        logger.info("SSDEBUG: Parsed bind DN for LDAP connection: " + dn + " -> " + getAuthenticationDn(user));
+        logger.debug("Parsed bind DN for LDAP connection: " + dn + " -> " + getAuthenticationDn(user));
 
         // Authenticate with the LDAP server
         bindContext = getLdapContext(user, pass);
@@ -184,7 +184,7 @@ public class LDAPServer {
     private DirContext getLdapContext(LDAPUser user, String pass) throws LDAPException {
         // Construct a fully qualified LDAP distinquished name that can be used to authenticate the user
         String userDn = getAuthenticationDn(user);
-        logger.info("SSDEBUG: Attempting to authenticate user: " + userDn);
+        logger.debug("Attempting to authenticate LDAP user: " + userDn);
 
         Hashtable<String,String> env = new Hashtable <String,String>();
         env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
@@ -234,7 +234,7 @@ public class LDAPServer {
         search.setSearchScope(SearchControls.SUBTREE_SCOPE);
         search.setReturningAttributes(userAttributes);
         try {
-            logger.info("SSDEBUG: Attempting to query LDAP for user: " + filter);
+            logger.debug("Attempting to query LDAP for user: " + filter);
             NamingEnumeration<SearchResult> answer = bindContext.search("", filter, search);
             if (answer.hasMore()) {
                 // Pick the first result in the search results (hopefully there is only one)
@@ -243,7 +243,7 @@ public class LDAPServer {
 
                 // Construct the user object by parsing the full LDAP string
                 String userDN = result.getNameInNamespace();
-                logger.info("SSDEBUG: Found user result: " + userDN);
+                logger.debug("Found user result: " + userDN);
                 targetUser = new LDAPUser();
                 if ((userDN != null) && (userDN.length() > 0)) {
                     setObjectValuesFromString(targetUser, userDN);
