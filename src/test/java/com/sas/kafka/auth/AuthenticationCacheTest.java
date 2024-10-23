@@ -51,7 +51,7 @@ public class AuthenticationCacheTest {
         AuthenticationCache authCache = new AuthenticationCache();
 
         // Create a credential to put in the cache
-        AuthenticationCredentials credential = new AuthenticationCredentials(testUsername, testPassword, passwordSalt);
+        AuthenticationCredential credential = new AuthenticationCredential(testUsername, testPassword, passwordSalt);
 
         // Generate multiple authentication attempts and add them to the cache
         int maxCount = 5;
@@ -100,7 +100,7 @@ public class AuthenticationCacheTest {
         AuthenticationCache authCache = new AuthenticationCache();
 
         // Create a credential to put in the cache
-        AuthenticationCredentials credential = new AuthenticationCredentials(testUsername, testPassword, passwordSalt);
+        AuthenticationCredential credential = new AuthenticationCredential(testUsername, testPassword, passwordSalt);
 
         // Continually add new authentication attempts to the cache until the max depth is reached
         authCache.setMaxDepth(MAX_CACHE_DEPTH);

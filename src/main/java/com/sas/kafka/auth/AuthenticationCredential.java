@@ -5,6 +5,7 @@
 package com.sas.kafka.auth;
 
 import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.security.spec.KeySpec;
 import java.util.Base64;
 
@@ -17,7 +18,16 @@ import javax.crypto.spec.PBEKeySpec;
  * of the password is saved so that it can be used to determine if two
  * credentials are identical.
  */
-public class AuthenticationCredentials {
+public class AuthenticationCredential {
+
+    /** Default salt length */
+    public static int DEFAULT_SALT_LENGTH = 16;
+
+    /** Delimited used to separate the username from the salt and password when storing as a string */
+    public static String DEFAULT_USERNAME_DELIMITER = ":";
+
+    /** Delimited used to separate the salt from the password when storing as a string */
+    public static String DEFAULT_SALT_DELIMITER = ":";
 
     /** Username provided by the client during the authentication attempt */
     private String username = null;
@@ -29,7 +39,27 @@ public class AuthenticationCredentials {
     private byte[] encodedPassword = null;
 
     /**
-     * Construct an authentication attempt.  This class will not store the
+     * Construct an authentication credential.  This class will not store the
+     * password for security, but it will create a hashed version to confirm
+     * that a password attempt hasn't changed.  Since no salt is provided, one
+     * will be generated.
+     *
+     * @param username   Username provided by the client
+     * @param password   Password provided by the client
+     */
+    public AuthenticationCredential(String username, String password) {
+        this.username = username;
+        this.passwordSalt = generateSalt();
+
+        try {
+            encodedPassword = encodePassword(passwordSalt, password);
+        } catch (AuthenticationCredentialsException ex) {
+            // Do nothing if the hashing algorithm is unavailable?
+        }
+    }
+
+    /**
+     * Construct an authentication credential.  This class will not store the
      * password for security, but it will create a hashed version to confirm
      * that a password attempt hasn't changed.  The salt value will be used
      * when hashing the password.
@@ -38,15 +68,79 @@ public class AuthenticationCredentials {
      * @param password   Password provided by the client
      * @param salt       Salt used to encode the password
      */
-    public AuthenticationCredentials(String username, String password, byte[] salt) {
+    public AuthenticationCredential(String username, String password, byte[] salt) {
         this.username = username;
         this.passwordSalt = salt;
 
         try {
-            encodedPassword = encodePassword(salt, password);
+            encodedPassword = encodePassword(passwordSalt, password);
         } catch (AuthenticationCredentialsException ex) {
             // Do nothing if the hashing algorithm is unavailable?
         }
+    }
+
+    /**
+     * Construct an authentication credential from an existing (already encoded)
+     * password.  This method is used when the original password is not available.
+     *
+     * @param username          Username provided by the client
+     * @param encodedPassword   Encoded password
+     * @param salt              Salt used to encode the password
+     */
+    public AuthenticationCredential(String username, byte[] encodedPassword, byte[] salt) {
+        this.username = username;
+        this.encodedPassword = encodedPassword;
+        this.passwordSalt = salt;
+    }
+
+    /**
+     * Perform Base64 encoding of a byte array.
+     *
+     * @param bytes  Byte array to base64 encode
+     * @return Base64 encoded byte array
+     */
+    public static String base64Encode(byte[] bytes) {
+        if ((bytes != null) && (bytes.length > 0)) {
+            return Base64.getEncoder().encodeToString(bytes);
+        } else {
+            return null;
+        }
+    }
+
+    /**
+     * Perform Base64 decoding of a string.
+     *
+     * @param b64  Base64 encoded string
+     * @return Byte array decoded from the Base64 string
+     */
+    public static byte[] base64Decode(String b64) {
+        if ((b64 != null) && (b64.length() > 0)) {
+            return Base64.getDecoder().decode(b64);
+        } else {
+            return null;
+        }
+    }
+
+    /**
+     * Generate a random salt value.
+     *
+     * @return Random salt
+     */
+    public static byte[] generateSalt() {
+        return generateSalt(DEFAULT_SALT_LENGTH);
+    }
+
+    /**
+     * Generate a random salt value of the specified length.
+     *
+     * @return Random salt
+     */
+    public static byte[] generateSalt(int length) {
+        SecureRandom random = new SecureRandom();
+        byte[] salt = new byte[length];
+        random.nextBytes(salt);
+
+        return salt;
     }
 
     /**
@@ -104,7 +198,7 @@ public class AuthenticationCredentials {
      * @param credentials Authentication credentials to compare to
      * @return TRUE if the attempt is a duplicate of this object
      */
-    public boolean isDuplicate(AuthenticationCredentials credentials) {
+    public boolean isDuplicate(AuthenticationCredential credentials) {
         if (!username.equals(credentials.getUsername())) {
             return false;
         }
@@ -135,6 +229,16 @@ public class AuthenticationCredentials {
     }
 
     /**
+     * Return the salt value as a base64 encoded string or null if the original
+     * salt was null or zero length.
+     *
+     * @return Base64 encoded string or null
+     */
+    public String getPasswordSaltAsString() {
+        return base64Encode(passwordSalt);
+    }
+
+    /**
      * Get the password digest of the password used in the authentication attempt.
      * Although this class does not store the password, the digest makes it possible
      * to determine if the same password is being used across different authentication
@@ -153,11 +257,75 @@ public class AuthenticationCredentials {
      * @return Base64 encoded string or null
      */
     public String getEncodedPasswordAsString() {
-        if ((encodedPassword != null) && (encodedPassword.length > 0)) {
-            return Base64.getEncoder().encodeToString(encodedPassword);
-        } else {
-            return null;
+        return base64Encode(encodedPassword);
+    }
+
+    /**
+     * Return the username, salt, and encoded password as a combined string.  This can be
+     * used to store the credentials for later comparison.
+     *
+     * @return String containing the username, salt, and encoded password
+     */
+    public String toString() {
+        StringBuffer buffer = new StringBuffer();
+
+        // Append the username
+        if (getUsername() != null) {
+            buffer.append(getUsername());
         }
+        buffer.append(DEFAULT_USERNAME_DELIMITER);
+
+        // Append the salt
+        String b64salt = getPasswordSaltAsString();
+        if (b64salt != null) {
+            buffer.append(b64salt);
+        }
+        buffer.append(DEFAULT_SALT_DELIMITER);
+
+        // Append the encoded password
+        String b64password = getEncodedPasswordAsString();
+        if (b64password != null) {
+            buffer.append(b64password);
+        }
+
+        return buffer.toString();
+    }
+
+    /**
+     * Parse the username, salt, and password string and return an object containing
+     * all three values.  This method assumes that the string was produced by the
+     * toString() method, which combines the salt and password as:
+     * <code>
+     * Username + Delimiter + Base64 Salt + Delimiter + Base64 encoded password
+     * </code>
+     *
+     * @param credString  String produced by the toString() method
+     * @return User credentials parsed from the string
+     */
+    public static AuthenticationCredential parse(String credString) {
+        AuthenticationCredential credentials = null;
+
+        // Locate the username
+        int userDelimiterIndex = credString.indexOf(DEFAULT_USERNAME_DELIMITER);
+        if (userDelimiterIndex > 0) {
+            String name = credString.substring(0, userDelimiterIndex);
+            String saltAndPassword = credString.substring(userDelimiterIndex + 1);
+
+            // Locate the salt
+            int saltDelimiterIndex = saltAndPassword.indexOf(DEFAULT_SALT_DELIMITER);
+            if ((saltDelimiterIndex > 0) && (saltAndPassword.length() > saltDelimiterIndex + 1)) {
+                String b64salt = saltAndPassword.substring(0, saltDelimiterIndex);
+                String b64pass = saltAndPassword.substring(saltDelimiterIndex + 1);
+
+                // Decode the base64 encoded salt and password
+                byte[] salt = base64Decode(b64salt);
+                byte[] pass = base64Decode(b64pass);
+
+                credentials = new AuthenticationCredential(name, pass, salt);
+            }
+        }
+
+        return credentials;
     }
 
     /**

@@ -83,7 +83,7 @@ jacocoTestCoverageVerification {
             // includes = ['com.sas.kafka.auth.*', 'com.sas.kafka.auth.*']
             excludes = [
                 'com.sas.kafka.auth.KafkaAuthorizer',
-                'com.sas.kafka.auth.KafkaAuthenticationHandler',
+                'com.sas.kafka.auth.AuthenticationCredentialCmdLine',
                 'com.sas.kafka.auth.LDAPServer'
             ]
         }

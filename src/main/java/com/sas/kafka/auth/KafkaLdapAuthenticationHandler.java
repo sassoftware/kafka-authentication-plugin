@@ -4,16 +4,22 @@
  */
 package com.sas.kafka.auth;
 
+import com.sun.security.auth.UserPrincipal;
+
 import java.io.IOException;
 import java.security.SecureRandom;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import javax.security.auth.Subject;
 import javax.security.auth.callback.Callback;
+import javax.security.auth.callback.CallbackHandler;
 import javax.security.auth.callback.NameCallback;
 import javax.security.auth.callback.UnsupportedCallbackException;
 import javax.security.auth.login.AppConfigurationEntry;
+import javax.security.auth.spi.LoginModule;
 
 import org.apache.kafka.common.security.auth.AuthenticateCallbackHandler;
 import org.apache.kafka.common.security.plain.PlainAuthenticateCallback;
@@ -27,11 +33,11 @@ import org.slf4j.LoggerFactory;
  * file as:
  * <blockquote><code>
  * listener.name.LISENER_NAME.plain.sasl.server.callback.handler.class=\
- *     com.sas.kafka.auth.KafkaAuthenticationHandler
+ *     com.sas.kafka.auth.KafkaLdapAuthenticationHandler
  * </code></blockquote>
  */
-public class KafkaAuthenticationHandler implements AuthenticateCallbackHandler {
-    private static final Logger logger = LoggerFactory.getLogger(KafkaAuthenticationHandler.class);
+public class KafkaLdapAuthenticationHandler implements AuthenticateCallbackHandler {
+    private static final Logger logger = LoggerFactory.getLogger(KafkaLdapAuthenticationHandler.class);
 
     /** Kafka property specifying the LDAP server URL */
     public static final String AUTH_LDAP_SERVER_URL = "auth.ldap.server.url";
@@ -79,7 +85,6 @@ public class KafkaAuthenticationHandler implements AuthenticateCallbackHandler {
      */
     private byte[] cacheSalt = null;
 
-
     /**
      * Maximum age in milliseconds that the authentication cache entries remain valid.
      */
@@ -88,7 +93,7 @@ public class KafkaAuthenticationHandler implements AuthenticateCallbackHandler {
     /**
      * Construct the LDAP Authentication handler.
      */
-    public KafkaAuthenticationHandler() {
+    public KafkaLdapAuthenticationHandler() {
         // Initialize the salt with a random value
         cacheSalt = generateSalt();
     }
@@ -134,11 +139,7 @@ public class KafkaAuthenticationHandler implements AuthenticateCallbackHandler {
      */
     @Override
     public void configure(Map<String,?> configs, String saslMechanism, List<AppConfigurationEntry> jaasConfigEntries) {
-        logger.info("SSDEBUG: KafkaAuthenticationHandler.configure() called for " + saslMechanism);
-
-        for (AppConfigurationEntry entry : jaasConfigEntries) {
-            logger.info("SSDEBUG: JAAS Entry: " + entry.toString());
-        }
+        logger.debug("KafkaLdapAuthenticationHandler.configure() called for " + saslMechanism);
 
         // Get the LDAP configuration values from the Kafka properties
         String url = (String) configs.get(AUTH_LDAP_SERVER_URL);
@@ -218,15 +219,15 @@ public class KafkaAuthenticationHandler implements AuthenticateCallbackHandler {
 
     @Override
     public void close() {
-        logger.info("KafkaAuthenticationHandler.close() called.");
+        logger.info("KafkaLdapAuthenticationHandler.close() called.");
     }
 
     @Override
     // See https://docs.oracle.com/javase/8/docs/api/javax/security/auth/callback/CallbackHandler.html
     public void handle(Callback[] callbacks) throws IOException, UnsupportedCallbackException {
-        logger.info("SSDEBUG: KafkaAuthenticationHandler.handle() starting...");
+        logger.debug("KafkaLdapAuthenticationHandler.handle() starting...");
         for (Callback callback: callbacks) {
-            logger.info("SSDEBUG: KafkaAuthenticationHandler.handle() callback: " + callback.toString());
+            logger.debug("KafkaLdapAuthenticationHandler.handle() callback: " + callback.toString());
         }
 
         // The username and password are provided as part of two different callbacks.
@@ -242,29 +243,28 @@ public class KafkaAuthenticationHandler implements AuthenticateCallbackHandler {
                 } else {
                     username = nc.getDefaultName();
                 }
-                logger.info("SSDEBUG: KafkaAuthenticationHandler.handle() name callback: " + username);
+                logger.debug("KafkaLdapAuthenticationHandler.handle() name callback: " + username);
                 if ((username == null) || (username.trim().length() == 0)) {
                     throw new IOException("Authentication username is null or empty.");
                 }
             } else if (callback instanceof PlainAuthenticateCallback) {
                 PlainAuthenticateCallback pc = (PlainAuthenticateCallback) callback;
                 password = new String(pc.password());
-                logger.info("SSDEBUG: KafkaAuthenticationHandler.handle() performing authentication: username=" + username + ", password=" + password);
+                logger.debug("KafkaLdapAuthenticationHandler.handle() performing authentication: username=" + username + ", password=" + password);
                 if ((password == null) || (password.trim().length() == 0)) {
                     throw new IOException("Authentication password is null or empty.");
                 }
 
                 // Once the username and password have been obtained, perform the authentication
                 AuthenticationAttempt currentAttempt = authenticate(username, password);
-                logger.info("SSDEBUG: KafkaAuthenticationHandler.handle() authentication complete: [" + currentAttempt.getStatus() + "] " + currentAttempt.getStatusMessage());
+                logger.debug("KafkaLdapAuthenticationHandler.handle() authentication complete: [" + currentAttempt.getStatus() + "] " + currentAttempt.getStatusMessage());
                 pc.authenticated(currentAttempt.wasSuccessful());
-
             } else {
                 throw new UnsupportedCallbackException(callback);
             }
         }
 
-        logger.info("SSDEBUG: KafkaAuthenticationHandler.handle() completed.");
+        logger.debug("KafkaLdapAuthenticationHandler.handle() completed.");
     }
 
     /**
@@ -274,19 +274,19 @@ public class KafkaAuthenticationHandler implements AuthenticateCallbackHandler {
      * @param password  LDAP password
      */
     private AuthenticationAttempt authenticate(String username, String password) {
-        AuthenticationCredentials credentials = new AuthenticationCredentials(username, password, cacheSalt);
+        AuthenticationCredential credentials = new AuthenticationCredential(username, password, cacheSalt);
         AuthenticationAttempt currentAttempt = new AuthenticationAttempt(credentials);
 
         // Check the cache first to determine if the cached authentication can be used
         boolean authenticatedFromCache = false;
         if (cacheEnabled) {
-            logger.info("SSDEBUG: KafkaAuthenticationHandler.authenticate() using cache...");
+            logger.debug("KafkaLdapAuthenticationHandler.authenticate() using cache...");
             AuthenticationAttempt lastAttempt = cache.getMostRecentAttempt(credentials);
             if ((lastAttempt != null) && (lastAttempt.getStartDate() != null)) {
                 long lastAttemptTimestamp = lastAttempt.getStartDate().getTime();
                 long currentTimestamp = currentAttempt.getStartDate().getTime();
                 long delta = currentTimestamp - lastAttemptTimestamp;
-                logger.info("SSDEBUG: KafkaAuthenticationHandler.authenticate() delta = " + delta);
+                logger.debug("KafkaLdapAuthenticationHandler.authenticate() delta = " + delta);
                 // Determine if the last value in the cache had expired
                 if (delta < cacheAgeLimit) {
                     // Set the authentication status to the last value in the cache
@@ -295,18 +295,18 @@ public class KafkaAuthenticationHandler implements AuthenticateCallbackHandler {
                     currentAttempt.setStatusMessage("User authenticated from cache (formerly: " + lastAttempt.getStatusMessage() + ")");
                 }
             } else {
-                logger.info("SSDEBUG: KafkaAuthenticationHandler.authenticate() last attempt is null or no date available");
+                logger.debug("KafkaLdapAuthenticationHandler.authenticate() last attempt is null or no date available");
             }
         }
 
         // Authenticate against LDAP if the cache was not used
         if (!authenticatedFromCache) {
             try {
-                logger.info("SSDEBUG: KafkaAuthenticationHandler.authenticate() attempting LDAP authentication...");
+                logger.debug("KafkaLdapAuthenticationHandler.authenticate() attempting LDAP authentication...");
                 // The case where the LDAP server is null (initialization failure) is handled by the
                 // try/catch block catching the NullPointerException and treating it like a normal auth failure
                 boolean authenticated = server.areCredentialsValid(username, password);
-                logger.info("SSDEBUG: KafkaAuthenticationHandler.authenticate() LDAP returned authenticated = " + authenticated);
+                logger.debug("KafkaLdapAuthenticationHandler.authenticate() LDAP returned authenticated = " + authenticated);
                 if (authenticated) {
                     currentAttempt.setStatus(AuthenticationStatus.SUCCESS);
                     currentAttempt.setStatusMessage("Successfully authenticated against LDAP server.");
@@ -315,7 +315,7 @@ public class KafkaAuthenticationHandler implements AuthenticateCallbackHandler {
                     currentAttempt.setStatusMessage("Authenticated failed against LDAP server.");
                 }
             } catch (Exception ex) {
-                logger.error("SSDEBUG: Failed to authenticate user: " + username, ex);
+                logger.debug("Failed to authenticate LDAP user: " + username, ex);
                 currentAttempt.setStatus(AuthenticationStatus.ERROR);
                 currentAttempt.setStatusMessage(ex.getMessage());
             }
