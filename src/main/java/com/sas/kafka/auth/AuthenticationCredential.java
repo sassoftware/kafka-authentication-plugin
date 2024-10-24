@@ -112,10 +112,15 @@ public class AuthenticationCredential {
      *
      * @param b64  Base64 encoded string
      * @return Byte array decoded from the Base64 string
+     * @throws IllegalArgumentException if the string is not a valid Base64 string
      */
-    public static byte[] base64Decode(String b64) {
+    public static byte[] base64Decode(String b64) throws IllegalArgumentException {
         if ((b64 != null) && (b64.length() > 0)) {
-            return Base64.getDecoder().decode(b64);
+            try {
+                return Base64.getDecoder().decode(b64);
+            } catch (Exception ex) {
+                throw new IllegalArgumentException("Invalid Base64 string: " + b64, ex);
+            }
         } else {
             return null;
         }
