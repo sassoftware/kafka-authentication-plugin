@@ -47,7 +47,7 @@ The plugin is configured by setting the following properties in the Kafka `serve
 
 The plugin is configured by setting the following properties in the Kafka `server.properties` file:
 
-* `listeners` = ldapauth://localhost:9094<br/>
+* `listeners` = ldapauth://localhost:9095<br/>
 
 * `listener.name.ldapauth.plain.sasl.server.callback.handler.class` = com.sas.kafka.auth.KafkaLdapAuthenticationHandler<br/>
 
