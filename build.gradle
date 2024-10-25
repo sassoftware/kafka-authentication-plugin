@@ -1,5 +1,5 @@
 buildscript {
-    ext.kafka_version = '3.7.0'
+    ext.kafka_version = '3.8.0'
     ext.scala_version = '2.13'
     ext.slf4j_version = '2.0.12'
 }
@@ -83,7 +83,7 @@ jacocoTestCoverageVerification {
             // includes = ['com.sas.kafka.auth.*', 'com.sas.kafka.auth.*']
             excludes = [
                 'com.sas.kafka.auth.KafkaAuthorizer',
-                'com.sas.kafka.auth.KafkaAuthenticationHandler',
+                'com.sas.kafka.auth.AuthenticationCredentialCmdLine',
                 'com.sas.kafka.auth.LDAPServer'
             ]
         }
